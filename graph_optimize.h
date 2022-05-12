@@ -44,7 +44,7 @@ public:
 			    const int index,
 			    Matrix3x3 &A,
 			    Matrix3x3 &B,	
-			    Vector3 &b)
+			    Vector3 &e)
 	{
 		int id_i = from_ids[index];
 		int id_j = to_ids[index];
@@ -60,8 +60,8 @@ public:
 		Matrix3x3 f_ij = vt_i.inverse() * vt_j;
 	
 		DataType theta_i = v_i[2];
-		Vector2 t_i = v_i.head<2>();
-		Vector2 t_j = v_j.head<2>();
+		Vector2 t_i( v_i(0), v_i(1) );
+		Vector2 t_j( v_j(0), v_j(1) );
 	
 		Vector2 dt_ij = t_j - t_i;
 
@@ -91,7 +91,7 @@ private:
 		Matrix3x3 A;
 	
 		A << ::cos( v[2] ), -::sin( v[2] ), v[0],
-		     ::sin( v[2] ),  ::sin( v[2] ), V[1],
+		     ::sin( v[2] ),  ::sin( v[2] ), v[1],
 			0,                 0,        1;
 
 		return A;

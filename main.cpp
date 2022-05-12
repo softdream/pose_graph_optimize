@@ -1,5 +1,7 @@
 #include "read_graph_data.h"
 
+#include "graph_optimize.h"
+
 #include <vector>
 #include <map>
 
