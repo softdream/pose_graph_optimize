@@ -8,6 +8,10 @@
 #include <Eigen/Sparse>
 #include <Eigen/Eigen>
 
+#include<Eigen/SparseCholesky>
+
+#define PI 3.141592653
+
 namespace graph
 {
 
@@ -26,7 +30,9 @@ public:
 	explicit GraphOptimize( const int vertex_num )
 	{
 		H.resize( vertex_num * 3, vertex_num * 3 );
-		b.resize( vertex_num * 3 );
+		b.resize( vertex_num * 3, 1 );
+		delta_x.resize( vertex_num * 3, 1 );
+		x.resize( vertex_num * 3, 1 );
 	} 
 
 	~GraphOptimize()
@@ -37,7 +43,58 @@ public:
 	void setVertexNumber( const int vertex_num )
 	{
 		H.resize( vertex_num * 3, vertex_num * 3 );
-		b.resize( vertex_num * 3 );
+		b.resize( vertex_num * 3, 1 );
+		delta_x.resize( vertex_num * 3, 1 );
+		x.resize( vertex_num * 3, 1 );
+	}
+
+	void execuOptimize( const std::vector<Vector3> &v_poses,
+                            const std::vector<int> &from_ids,
+                            const std::vector<int> &to_ids,
+                            const std::vector<Vector3> &e_means,
+                            const Matrix3x3 &info_matrix,
+			    const int max_iterations = 10 )
+	{
+		for( size_t i = 0; i < v_poses.size(); i ++ ){
+			x( i * 3, 0 ) = v_poses[i](0);
+			x( i * 3 + 1, 0 ) = v_poses[i](1);
+			x( i * 3 + 2, 0 ) = v_poses[i](2);
+		}	
+
+		for( int iteration = 0; iteration < max_iterations; iteration ++ ){
+			estimateOnce( v_poses, from_ids, to_ids, e_means, info_matrix );
+		}
+
+		for( size_t i = 0; i < v_poses.size(); i ++ ){
+			angleNormalize( x( i * 3 + 2, 0 ) );
+		}
+	}
+
+	
+private:
+	void estimateOnce( const std::vector<Vector3> &v_poses,
+                           const std::vector<int> &from_ids,
+                           const std::vector<int> &to_ids,
+                           const std::vector<Vector3> &e_means,
+                           const Matrix3x3 &info_matrix )
+	{
+		getHessianDerived( v_poses, from_ids, to_ids, e_means, info_matrix );
+		
+		Eigen::SimplicialLLT<Eigen::SparseMatrix<DataType>> solver;
+		solver.compute( H );
+		
+		if (solver.info() != Eigen::Success) {
+			std::cerr << "Decomposition Failed !" << std::endl;
+			return;
+		}
+
+		delta_x = solver.solve( b );
+		if (solver.info() != Eigen::Success) {
+			std::cerr << "Solving Failed !" << std::endl;
+			return;
+		}
+
+		x += delta_x;
 	}
 
 	void getHessianDerived( const std::vector<Vector3> &v_poses,
@@ -179,9 +236,24 @@ private:
 		return v;
 	}
 
+	void angleNormalize( DataType &angle )
+	{
+        	if( angle >= M_PI ) {
+               		angle -= 2 * M_PI;
+        	}
+
+        	if( angle <= -M_PI ){
+                	angle += 2 * M_PI;
+        	}
+	}
+
 private:
 	Eigen::SparseMatrix<DataType> H;	
-	Eigen::SparseVector<DataType> b;
+	Eigen::SparseMatrix<DataType> b;
+	//Eigen::SparseMatrix<DataType> delta_x;
+	//Eigen::SparseMatrix<DataType> x;
+	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> delta_x;
+	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> x;
 
 	Matrix3x3 A;
 	Matrix3x3 B;
