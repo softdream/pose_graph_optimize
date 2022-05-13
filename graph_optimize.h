@@ -70,6 +70,21 @@ public:
 		}
 	}
 
+	const Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> &getResultVertexPosesMatrix() const
+	{
+		return x;
+	}
+	
+	const std::vector<Vector3> getReultVertexPosesVector() const
+	{
+		std::vector<Vector3> ret;
+		for( size_t i = 0; i < x.size(); i += 3 ){
+			Vector3 pose( x( i ), x( i + 1 ), x( i + 2 ) );
+			ret.push_back( pose );
+		}
+
+		return ret;
+	}
 	
 private:
 	void estimateOnce( const std::vector<Vector3> &v_poses,
@@ -80,6 +95,7 @@ private:
 	{
 		getHessianDerived( v_poses, from_ids, to_ids, e_means, info_matrix );
 		
+		// solve the linear system using sparse Cholesky factorization
 		Eigen::SimplicialLLT<Eigen::SparseMatrix<DataType>> solver;
 		solver.compute( H );
 		
@@ -88,12 +104,14 @@ private:
 			return;
 		}
 
+		delta_x.setZero();
 		delta_x = solver.solve( b );
 		if (solver.info() != Eigen::Success) {
 			std::cerr << "Solving Failed !" << std::endl;
 			return;
 		}
-
+		
+		// update 
 		x += delta_x;
 	}
 
@@ -111,57 +129,71 @@ private:
 		H_ji = Matrix3x3::Zero();
 		H_jj = Matrix3x3::Zero();		
 
+		std::vector <Eigen::Triplet<DataType>> H_triplets;		
+
+		H.setZero(); // 1. H <- 0
+		b.setZero(); //    b <- 0
+
+		// for all <e_ij, Omega_ij> do:
 		for( size_t i = 0; i < e_means.size(); i ++ ){
 			int id_i = from_ids[i];
 			int id_j = to_ids[i];
 
+			// compute the Jacobians A_ij and B_ij of the error function
 			linearFactors( v_poses, from_ids, to_ids, e_means, i );
 			
+			// compute the coefficient vector
 			b_i = -A.transpose() * info_matrix * e;
 			b_j = -B.transpose() * info_matrix * e;
+			// compute the contribution of this constraint to the linear system
 			H_ii = A.transpose() * info_matrix * A;
 			H_ij = A.transpose() * info_matrix * B;
 			H_ji = B.transpose() * info_matrix * A;
 			H_jj = B.transpose() * info_matrix * B;
 
+			// construct the sparse matrix H and dense matrix b
 			std::vector <Eigen::Triplet<DataType>> triplets;
 			for( int i = 0; i < H_ii.rows(); i ++ ){
 				for( int j = 0; j < H_ii.cols(); j ++ ){
-					triplets.emplace_back( id_i * 3 + i, id_i * 3 + j, H_ii( i, j ) );			
+					H_triplets.emplace_back( id_i * 3 + i, id_i * 3 + j, H_ii( i, j ) );			
 				}
 			}
 			
 			for( int i = 0; i < H_ij.rows(); i ++ ){
 				for( int j = 0; j < H_ij.cols(); j ++ ){
-					triplets.emplace_back( id_i * 3 + i, id_j * 3 + j, H_ij( i, j ) );
+					H_triplets.emplace_back( id_i * 3 + i, id_j * 3 + j, H_ij( i, j ) );
 				}
 			}
 			
 			for( int i = 0; i < H_ji.rows(); i ++ ){
 				for( int j = 0; j < H_ji.cols(); j ++ ){
-					triplets.emplace_back( id_j * 3 + i, id_i * 3 + j, H_ji( i, j ) );
+					H_triplets.emplace_back( id_j * 3 + i, id_i * 3 + j, H_ji( i, j ) );
 				}
 			}
 
 			for( int i = 0; i < H_jj.rows(); i ++ ){
 				for( int j = 0; j < H_jj.rows(); j ++ ){
-					triplets.push_back( id_j * 3 + i, id_j * 3 + j, H_jj( i, j ) );
+					H_triplets.push_back( id_j * 3 + i, id_j * 3 + j, H_jj( i, j ) );
 				}
 			}
 			
-			H.setFromTriplets( triplets.begin(), triplets.end() );
-
-			triplets.clear();
-			for( int i = 0; i < b_i.size(); i ++ ){
-				triplets.emplace_back( id_i * 3 + i, 0, b_i( i ) );	
-			}
+			//H.setFromTriplets( triplets.begin(), triplets.end() );
 	
-			for( int i = 0; i < b_j.size(); i ++ ){
-				triplets.emplace_back( id_j * 3 + i, 0, b_j( i ) );
-			}
-	
-			b.setFromTriplets( triplets.begin(), triplets.end() );
+			b( id_i * 3 ) += b_i( 0 );
+			b( id_i * 3 + 1 ) += b_i( 1 );
+			b( id_i * 3 + 2 ) += b_i( 2 );
+		
+			b( id_j * 3 ) += b_j( 0 );
+			b( id_j * 3 + 1 ) += b_j( 1 );
+			b( id_j * 3 + 2 ) += b_j( 1 );
 		}
+	
+		// keep the first node fixed
+		H_triplets.emplace_back( 0, 0, 1 );
+		H_triplets.emplace_back( 1, 1, 1 );
+		H_triplets.emplace_back( 2, 2, 1 );
+		
+		H.setFromTriplets( H_triplets.begin(), H_triplets.end() );
 	}
 
 	void linearFactors( const std::vector<Vector3> &v_poses, 
@@ -249,9 +281,10 @@ private:
 
 private:
 	Eigen::SparseMatrix<DataType> H;	
-	Eigen::SparseMatrix<DataType> b;
+	//Eigen::SparseMatrix<DataType> b;
 	//Eigen::SparseMatrix<DataType> delta_x;
 	//Eigen::SparseMatrix<DataType> x;
+	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> b;
 	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> delta_x;
 	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> x;
 
