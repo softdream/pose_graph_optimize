@@ -31,6 +31,7 @@ public:
 	explicit GraphOptimize( const int vertex_num )
 	{
 		H.resize( vertex_num * 3, vertex_num * 3 );
+		H_tmp.resize( vertex_num * 3, vertex_num * 3 );
 		b.resize( vertex_num * 3, 1 );
 		delta_x.resize( vertex_num * 3, 1 );
 		x.resize( vertex_num * 3, 1 );
@@ -44,6 +45,7 @@ public:
 	void setVertexNumber( const int vertex_num )
 	{
 		H.resize( vertex_num * 3, vertex_num * 3 );
+		H_tmp.resize( vertex_num * 3, vertex_num * 3 );
 		b.resize( vertex_num * 3, 1 );
 		delta_x.resize( vertex_num * 3, 1 );
 		x.resize( vertex_num * 3, 1 );
@@ -98,25 +100,24 @@ private:
 		getHessianDerived( v_poses, from_ids, to_ids, e_means, info_matrix );
 		
 		// solve the linear system using sparse Cholesky factorization
-		Eigen::SimplicialLDLT<Eigen::SparseMatrix<DataType>> solver;
-                //Eigen::SparseLU<Eigen::SparseMatrix<DataType>> solver;
-                solver.compute( H.sparseView() );
-
-                if (solver.info() != Eigen::Success) {
-                        std::cerr << "Decomposition Failed !" << std::endl;
-                        return;
-                }
-
-                delta_x.setZero();
-                delta_x = solver.solve( b );
-                if (solver.info() != Eigen::Success) {
-                        std::cerr << "Solving Failed !" << std::endl;
-                        return;
-                }
+		Eigen::SimplicialLLT<Eigen::SparseMatrix<DataType>> solver;
+		//Eigen::SparseLU<Eigen::SparseMatrix<DataType>> solver;
+		solver.compute( H );
 		
-		std::cout<<"delta_x : "<<std::endl<<delta_x<<std::endl;
-                // update
-                x -= delta_x;
+		if (solver.info() != Eigen::Success) {
+			std::cerr << "Decomposition Failed !" << std::endl;
+			return;
+		}
+
+		delta_x.setZero();
+		delta_x = solver.solve( b );
+		if (solver.info() != Eigen::Success) {
+			std::cerr << "Solving Failed !" << std::endl;
+			return;
+		}
+		
+		// update 
+		x += delta_x;
 	}
 
 	void getHessianDerived( const std::vector<Vector3> &v_poses,
@@ -132,12 +133,14 @@ private:
 		H_ji = Matrix3x3::Zero();
 		H_jj = Matrix3x3::Zero();		
 
+		std::vector<Eigen::Triplet<DataType>> H_triplets;		
 	
 		H.setZero(); // 1. H <- 0
 		b.setZero(); //    b <- 0
 
 		// for all <e_ij, Omega_ij> do:
 		for( size_t i = 0; i < e_means.size(); i ++ ){
+			H_tmp.setZero();
 			std::cout<<"------------ edge : "<<i<<" ------------"<<std::endl;
 			int id_i = from_ids[i];
 			int id_j = to_ids[i];
@@ -154,26 +157,62 @@ private:
 			H_ji = B.transpose() * info_matrix * A;
 			H_jj = B.transpose() * info_matrix * B;
 
-			H.block( id_i * 3, id_i * 3, 3, 3 ) += H_ii;
-			H.block( id_i * 3, id_j * 3, 3, 3 ) += H_ij;
-			H.block( id_j * 3, id_i * 3, 3, 3 ) += H_ji;
-			H.block( id_j * 3, id_j * 3, 3, 3 ) += H_jj;
+			H_triplets.clear();
+			// construct the sparse matrix H and dense matrix b
+			for( int i = 0; i < H_ii.rows(); i ++ ){
+				for( int j = 0; j < H_ii.cols(); j ++ ){
+					//H_triplets.emplace_back( id_i * 3 + i, id_i * 3 + j, H_ii( i, j ) );			
+					H_triplets.emplace_back( ( id_i - 1 ) * 3 + i, ( id_i - 1 ) * 3 + j, H_ii( i, j ) );	
+				}
+			}
+			
+			for( int i = 0; i < H_ij.rows(); i ++ ){
+				for( int j = 0; j < H_ij.cols(); j ++ ){
+					//H_triplets.emplace_back( id_i * 3 + i, id_j * 3 + j, H_ij( i, j ) );
+					H_triplets.emplace_back( ( id_i - 1 ) * 3 + i, ( id_j - 1 ) * 3 + j, H_ij( i, j ) );
+				}
+			}
+			
+			for( int i = 0; i < H_ji.rows(); i ++ ){
+				for( int j = 0; j < H_ji.cols(); j ++ ){
+					//H_triplets.emplace_back( id_j * 3 + i, id_i * 3 + j, H_ji( i, j ) );
+					H_triplets.emplace_back( ( id_j - 1 ) * 3 + i, ( id_i - 1 ) * 3 + j, H_ji( i, j ) );
+				}
+			}
 
-			b( id_i * 3 ) += b_i( 0 );
+			for( int i = 0; i < H_jj.rows(); i ++ ){
+				for( int j = 0; j < H_jj.rows(); j ++ ){
+					H_triplets.emplace_back( ( id_j - 1 ) * 3 + i, ( id_j - 1 ) * 3 + j, H_jj( i, j ) );
+				}
+			}
+			
+			H_tmp.setFromTriplets( H_triplets.begin(), H_triplets.end() );
+			H += H_tmp;
+		
+			/*b( id_i * 3 ) += b_i( 0 );
 			b( id_i * 3 + 1 ) += b_i( 1 );
 			b( id_i * 3 + 2 ) += b_i( 2 );
 		
 			b( id_j * 3 ) += b_j( 0 );
 			b( id_j * 3 + 1 ) += b_j( 1 );
-			b( id_j * 3 + 2 ) += b_j( 1 );
+			b( id_j * 3 + 2 ) += b_j( 1 );*/
 
+			b( ( id_i - 1 ) * 3 ) += b_i( 0 );
+                        b( ( id_i - 1 ) * 3 + 1 ) += b_i( 1 );
+                        b( ( id_i - 1 ) * 3 + 2 ) += b_i( 2 );
+                
+                        b( ( id_j - 1 ) * 3 ) += b_j( 0 );
+                        b( ( id_j - 1 ) * 3 + 1 ) += b_j( 1 );
+                        b( ( id_j - 1 ) * 3 + 2 ) += b_j( 1 );
 		}
-			
-		H( 0, 0 ) = 1;
-		H( 1, 1 ) = 1;
-		H( 2, 2 ) = 1;
-		std::cout<<"H : "<<H<<std::endl;
-		std::cout<<"b : "<<b<<std::endl;
+	
+		H_triplets.clear();
+		// keep the first node fixed
+		H_triplets.emplace_back( 0, 0, 1 );
+		H_triplets.emplace_back( 1, 1, 1 );
+		H_triplets.emplace_back( 2, 2, 1 );
+		
+		H.setFromTriplets( H_triplets.begin(), H_triplets.end() );
 	}
 
 
@@ -275,9 +314,11 @@ private:
 	}
 
 private:
-	//Eigen::SparseMatrix<DataType> H;	
-	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> H;	
-
+	Eigen::SparseMatrix<DataType> H;	
+	Eigen::SparseMatrix<DataType> H_tmp;
+	//Eigen::SparseMatrix<DataType> b;
+	//Eigen::SparseMatrix<DataType> delta_x;
+	//Eigen::SparseMatrix<DataType> x;
 	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> b;
 	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> delta_x;
 	Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic> x;

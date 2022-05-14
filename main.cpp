@@ -5,12 +5,15 @@
 #include <vector>
 #include <map>
 
+#include "utils.h"
+#include <chrono>
+
 int main()
 {
 	std::cout<<"------------------ POSE GRAPH TEST ------------------"<<std::endl;
 	simulation::ReadGraphData simu;
-	simu.openEdgeFile( "./data/killian-e.dat" );
-	simu.openVertexFile( "./data/killian-v.dat" );
+	simu.openEdgeFile( "./data/killian-e2.dat" );
+	simu.openVertexFile( "./data/killian-v2.dat" );
 
 	std::vector<int> vertex_ids;
 	std::vector<Eigen::Vector3f> vertex_poses;
@@ -19,8 +22,8 @@ int main()
 	std::vector<int> edge_to_ids;
 	std::vector<Eigen::Vector3f> edge_means;
 
-	while( !simu.endOfEdgeFile() ){
-//		std::cout<<"edge frame count : "<<simu.getEdgeCount()<<std::endl;
+	while( simu.getEdgeCount() < 20 ){
+		std::cout<<"edge frame count : "<<simu.getEdgeCount()<<std::endl;
 		int id_from = 0;
 		int id_to = 0;
 		Eigen::Vector3f mean( 0.0, 0.0, 0.0 );
@@ -32,8 +35,8 @@ int main()
 		edge_means.push_back( mean );
 	}
 
-	while( !simu.endOfVertexFile() ){
-//		std::cout<<"vertex frame count : "<<simu.getVertexCount()<<std::endl;
+	while( simu.getVertexCount() < 21 ){
+		std::cout<<"vertex frame count : "<<simu.getVertexCount()<<std::endl;
 		int vertex_id = 0;
 		Eigen::Vector3f pose( 0.0, 0.0, 0.0 );
 		
@@ -52,6 +55,36 @@ int main()
 	for( int i = 0; i < edge_from_ids.size(); i ++ ){
 		std::cout<<"id from : "<<edge_from_ids[i]<<" to : "<<edge_to_ids[i]<<std::endl;
 	}
+	for( int i = 0; i < edge_means.size(); i ++ ){
+                std::cout<<"edge_means : "<<i<<std::endl<<edge_means[i]<<std::endl;
+        }
+
+	Utils::displayVertexPoses( vertex_poses, "init" );
+
+	// ------------------- Graph Optimize -------------------- //
+	graph::GraphOptimize<float> optimizer( vertex_poses.size() );
+
+	Eigen::Matrix3f info_matrix;
+	info_matrix << 1, 0, 0,
+		       0, 1, 0,
+		       0, 0, 1;
+	auto beforeTime = std::chrono::steady_clock::now();
+	optimizer.execuOptimize( vertex_poses, 
+				 edge_from_ids, 
+				 edge_to_ids, 
+				 edge_means,
+				 info_matrix, 10 );
+	auto afterTime = std::chrono::steady_clock::now();
+        double duration_millsecond = std::chrono::duration<double, std::milli>(afterTime - beforeTime).count();
+        std::cout<<"duration : " << duration_millsecond << "ms" << std::endl;
+
+	std::vector<Eigen::Vector3f> ret_vec = optimizer.getReultVertexPosesVector();
+	
+	for( int i = 0; i < 10; i ++ ){
+		std::cout<<"vertex["<<i<<"] : "<<std::endl<<ret_vec[i]<<std::endl;
+	}
+
+	Utils::displayVertexPoses( ret_vec );
 
 	return 0;
 }
