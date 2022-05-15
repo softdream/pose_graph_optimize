@@ -21,18 +21,22 @@ int main()
 	std::vector<int> edge_from_ids;
 	std::vector<int> edge_to_ids;
 	std::vector<Eigen::Vector3d> edge_means;
+	std::vector<Eigen::Matrix3d> info_matrixes;
 
 	while( simu.getEdgeCount() < 3995 ){
 		//std::cout<<"edge frame count : "<<simu.getEdgeCount()<<std::endl;
 		int id_from = 0;
 		int id_to = 0;
 		Eigen::Vector3d mean( 0.0, 0.0, 0.0 );
+		Eigen::Matrix3d info_matrix = Eigen::Matrix3d::Zero();
 		
-		simu.readAEdge( id_from, id_to, mean );
+
+		simu.readAEdge( id_from, id_to, mean, info_matrix );
 		
 		edge_from_ids.push_back( id_from );	
 		edge_to_ids.push_back( id_to );
 		edge_means.push_back( mean );
+		info_matrixes.push_back( info_matrix );
 	}
 
 	while( simu.getVertexCount() < 1941 ){
@@ -57,7 +61,13 @@ int main()
 	}
 	for( int i = 0; i < edge_means.size(); i ++ ){
                 std::cout<<"edge_means : "<<i<<std::endl<<edge_means[i]<<std::endl;
-        }*/
+        }
+
+	for( int i = 0; i < info_matrixes.size(); i ++ ){
+		std::cout<<"info_matrix["<<i<<"] : "<<std::endl<<info_matrixes[i]<<std::endl;
+	}
+*/
+	
 	std::cout<<"edge_number : "<<edge_means.size()<<std::endl;
 	std::cout<<"vertex number : "<<vertex_ids.size()<<std::endl;
 
@@ -66,27 +76,19 @@ int main()
 	// ------------------- Graph Optimize -------------------- //
 	graph::GraphOptimize<double> optimizer( vertex_poses.size() );
 
-	Eigen::Matrix3d info_matrix;
-	info_matrix << 20, 0, 0,
-		       0, 20, 0,
-		       0, 0, 100000;
 	auto beforeTime = std::chrono::steady_clock::now();
 	optimizer.execuOptimize( vertex_poses, 
 				 edge_from_ids, 
 				 edge_to_ids, 
 				 edge_means,
-				 info_matrix, 1 );
+				 info_matrixes, 2 );
 	auto afterTime = std::chrono::steady_clock::now();
         double duration_millsecond = std::chrono::duration<double, std::milli>(afterTime - beforeTime).count();
         std::cout<<"duration : " << duration_millsecond << "ms" << std::endl;
 
 	std::vector<Eigen::Vector3d> ret_vec = optimizer.getReultVertexPosesVector();
-	
-	/*for( int i = 0; i < 10; i ++ ){
-		std::cout<<"vertex["<<i<<"] : "<<std::endl<<ret_vec[i]<<std::endl;
-	}*/
 
 	Utils::displayVertexPoses( ret_vec );
-
+	
 	return 0;
 }

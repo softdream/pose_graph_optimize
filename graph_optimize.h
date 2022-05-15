@@ -49,11 +49,11 @@ public:
 		x.resize( vertex_num * 3, 1 );
 	}
 
-	void execuOptimize( const std::vector<Vector3> &v_poses,
+	void execuOptimize( std::vector<Vector3> &v_poses,
                             const std::vector<int> &from_ids,
                             const std::vector<int> &to_ids,
                             const std::vector<Vector3> &e_means,
-                            const Matrix3x3 &info_matrix,
+                            const std::vector<Matrix3x3> &info_matrix,
 			    const int max_iterations = 10 )
 	{
 		for( size_t i = 0; i < v_poses.size(); i ++ ){
@@ -93,11 +93,11 @@ public:
 	}
 	
 private:
-	void estimateOnce( const std::vector<Vector3> &v_poses,
+	void estimateOnce( std::vector<Vector3> &v_poses,
                            const std::vector<int> &from_ids,
                            const std::vector<int> &to_ids,
                            const std::vector<Vector3> &e_means,
-                           const Matrix3x3 &info_matrix )
+                           const std::vector<Matrix3x3> &info_matrix )
 	{
 		getHessianDerived( v_poses, from_ids, to_ids, e_means, info_matrix );
 		
@@ -122,20 +122,29 @@ private:
                 // update
                 x += delta_x;
 		//std::cout<<"x_new  = "<<std::endl<<x<<std::endl;
+		//for( size_t i = 0; i < x.size(); i ++ ){
+                //        std::cout<<"x_new[ "<<i<<" ] = "<<x(i, 0)<<std::endl;
+                //}
+
+		v_poses.clear();
+		for( size_t i = 0; i < x.size(); i += 3 ){
+                        Vector3 pose( x( i ), x( i + 1 ), x( i + 2 ) );
+                        v_poses.push_back( pose );
+                }
 	}
 
 	void getHessianDerived( const std::vector<Vector3> &v_poses,
 				const std::vector<int> &from_ids,
 				const std::vector<int> &to_ids,
 				const std::vector<Vector3> &e_means,
-				const Matrix3x3 &info_matrix )
+				const std::vector<Matrix3x3> &info_matrix )
 	{
 		H.setZero(); // 1. H <- 0
 		b.setZero(); //    b <- 0
 
 		// for all <e_ij, Omega_ij> do:
 		for( size_t i = 0; i < e_means.size(); i ++ ){
-			std::cout<<"------------------- edge : "<<i<<" ---------------------"<<std::endl;
+			//std::cout<<"------------------- edge : "<<i<<" ---------------------"<<std::endl;
 			int id_i = from_ids[i];
 			int id_j = to_ids[i];
 			//std::cout<<"from id_i = "<<id_i<<", to id_j = "<<id_j<<std::endl;
@@ -149,14 +158,16 @@ private:
                 	H_ij = Matrix3x3::Zero();
 	                H_ji = Matrix3x3::Zero();
         	        H_jj = Matrix3x3::Zero();
+			
+			Matrix3x3 omega = info_matrix[i];
 
-			b_i = -A.transpose() * info_matrix * e;
-			b_j = -B.transpose() * info_matrix * e;
+			b_i = -A.transpose() * omega * e;
+			b_j = -B.transpose() * omega * e;
 			// compute the contribution of this constraint to the linear system
-			H_ii = A.transpose() * info_matrix * A;
-			H_ij = A.transpose() * info_matrix * B;
-			//H_ji = B.transpose() * info_matrix * A;
-			H_jj = B.transpose() * info_matrix * B;
+			H_ii = A.transpose() * omega * A;
+			H_ij = A.transpose() * omega * B;
+			//H_ji = B.transpose() * omega * A;
+			H_jj = B.transpose() * omega * B;
 
 			if( i == 1499 ){
 				std::cout<<"b_i : "<< std::endl<<b_i<<std::endl;
@@ -222,25 +233,25 @@ private:
 		Vector3 v_i = v_poses[id_i];
 		Vector3 v_j = v_poses[id_j];
 		Vector3 z_ij = e_means[index];
-		if( index == 1499 ){
-			std::cout<<"v_i = "<<id_i<<std::endl<<v_i<<std::endl;
-			std::cout<<"v_j = "<<id_j<<std::endl<<v_j<<std::endl;	
-			std::cout<<"z_ij = "<<std::endl<<z_ij<<std::endl;
-		}
+		//if( index == 1499 ){
+		//	std::cout<<"v_i = "<<id_i<<std::endl<<v_i<<std::endl;
+		//	std::cout<<"v_j = "<<id_j<<std::endl<<v_j<<std::endl;	
+		//	std::cout<<"z_ij = "<<std::endl<<z_ij<<std::endl;
+		//}
 
 		Matrix3x3 zt_ij = v2t( z_ij );
 		Matrix3x3 vt_i = v2t( v_i );
 		Matrix3x3 vt_j = v2t( v_j );
-		if( index == 1499 ){
-			std::cout<<"zt_ij = "<<std::endl<<zt_ij<<std::endl;
-			std::cout<<"vt_i = "<<std::endl<<vt_i<<std::endl;
-			std::cout<<"vt_j = "<<std::endl<<vt_j<<std::endl;
-		}
+		//if( index == 1499 ){
+		//	std::cout<<"zt_ij = "<<std::endl<<zt_ij<<std::endl;
+		//	std::cout<<"vt_i = "<<std::endl<<vt_i<<std::endl;
+		//	std::cout<<"vt_j = "<<std::endl<<vt_j<<std::endl;
+		//}
 		
 		Matrix3x3 f_ij = vt_i.inverse() * vt_j;
-		if( index == 1499 ){
-			std::cout<<"f_ij = "<<std::endl<<f_ij<<std::endl;		
-		}
+		//if( index == 1499 ){
+		//	std::cout<<"f_ij = "<<std::endl<<f_ij<<std::endl;		
+		//}
 
 		DataType theta_i = v_i[2];
 		Vector2 t_i( v_i[0], v_i[1] );
@@ -259,27 +270,27 @@ private:
 		B << ci, si, 0,
 		    -si, ci, 0,
 		      0,  0, 1;
-		if( index == 1499 ){
-			std::cout<<"A_pre = "<<std::endl<<A<<std::endl;
-			std::cout<<"B_pre = "<<std::endl<<B<<std::endl;
-		}	
+		//if( index == 1499 ){
+		//	std::cout<<"A_pre = "<<std::endl<<A<<std::endl;
+		//	std::cout<<"B_pre = "<<std::endl<<B<<std::endl;
+		//}	
 		Matrix3x3 zt_ij_inv = zt_ij.inverse();
 		//std::cout<<"zt_ij_inv = "<<std::endl<<zt_ij_inv<<std::endl;
 	
 		e = t2v( zt_ij_inv * f_ij );
-		if( index == 1499 ){
-			std::cout<<"e = "<<e.transpose()<<std::endl;	
-		}	
+		//if( index == 1499 ){
+		//	std::cout<<"e = "<<e.transpose()<<std::endl;	
+		//}	
 	
 		zt_ij_inv( 0, 2 ) = 0;
 		zt_ij_inv( 1, 2 ) = 0;
 	
 		A = zt_ij_inv * A;
 		B = zt_ij_inv * B;
-		if( index == 1499 ){
-			std::cout<<"A = "<<std::endl<<A<<std::endl;
-			std::cout<<"B = "<<std::endl<<B<<std::endl;
-		}
+		//if( index == 1499 ){
+		//	std::cout<<"A = "<<std::endl<<A<<std::endl;
+		//	std::cout<<"B = "<<std::endl<<B<<std::endl;
+		//}
 	}
 
 private:

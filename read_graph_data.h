@@ -55,7 +55,7 @@ public:
 		return vertex_file.close();
 	}
 
-	void readAEdge( int &idFrom, int &idTo, Eigen::Vector3d &mean )
+	void readAEdge( int &idFrom, int &idTo, Eigen::Vector3d &mean, Eigen::Matrix3d &info_matrix )
 	{
 		std::string line;
 		std::getline( edge_file, line );
@@ -76,6 +76,16 @@ public:
 				iss >> num;
 				mean[i] = std::stod( num );
 			}
+		
+			double data[6];
+			for( int i = 0; i < 6; i ++ ){
+				iss >> num;
+				data[i] = std::stod( num );
+			}
+		
+			info_matrix( 0, 0 ) = data[0];
+			info_matrix( 1, 1 ) = data[2];
+			info_matrix( 2, 2 ) = data[3];
 			
 			edge_count ++;
 		}
