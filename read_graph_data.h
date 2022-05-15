@@ -55,7 +55,7 @@ public:
 		return vertex_file.close();
 	}
 
-	void readAEdge( int &idFrom, int &idTo, Eigen::Vector3f &mean )
+	void readAEdge( int &idFrom, int &idTo, Eigen::Vector3d &mean )
 	{
 		std::string line;
 		std::getline( edge_file, line );
@@ -74,14 +74,14 @@ public:
 	
 			for( int i = 0; i < 3; i ++ ){
 				iss >> num;
-				mean[i] = std::stof( num );
+				mean[i] = std::stod( num );
 			}
 			
 			edge_count ++;
 		}
 	}
 
-	void readAVertex( int &id, Eigen::Vector3f &pose )
+	void readAVertex( int &id, Eigen::Vector3d &pose )
 	{
 		std::string line;
                 std::getline( vertex_file, line );
@@ -98,7 +98,7 @@ public:
 
 			for( int i = 0; i < 3; i ++ ){
 				iss >> num;
-				pose[i] = std::stof( num );
+				pose[i] = std::stod( num );
 			}
 
 			vertex_count ++;

@@ -12,21 +12,21 @@ int main()
 {
 	std::cout<<"------------------ POSE GRAPH TEST ------------------"<<std::endl;
 	simulation::ReadGraphData simu;
-	simu.openEdgeFile( "./data/killian-e2.dat" );
-	simu.openVertexFile( "./data/killian-v2.dat" );
+	simu.openEdgeFile( "./data/killian-e.dat" );
+	simu.openVertexFile( "./data/killian-v.dat" );
 
 	std::vector<int> vertex_ids;
-	std::vector<Eigen::Vector3f> vertex_poses;
+	std::vector<Eigen::Vector3d> vertex_poses;
 
 	std::vector<int> edge_from_ids;
 	std::vector<int> edge_to_ids;
-	std::vector<Eigen::Vector3f> edge_means;
+	std::vector<Eigen::Vector3d> edge_means;
 
-	while( simu.getEdgeCount() < 20 ){
-		std::cout<<"edge frame count : "<<simu.getEdgeCount()<<std::endl;
+	while( simu.getEdgeCount() < 3995 ){
+		//std::cout<<"edge frame count : "<<simu.getEdgeCount()<<std::endl;
 		int id_from = 0;
 		int id_to = 0;
-		Eigen::Vector3f mean( 0.0, 0.0, 0.0 );
+		Eigen::Vector3d mean( 0.0, 0.0, 0.0 );
 		
 		simu.readAEdge( id_from, id_to, mean );
 		
@@ -35,10 +35,10 @@ int main()
 		edge_means.push_back( mean );
 	}
 
-	while( simu.getVertexCount() < 21 ){
-		std::cout<<"vertex frame count : "<<simu.getVertexCount()<<std::endl;
+	while( simu.getVertexCount() < 1941 ){
+		//std::cout<<"vertex frame count : "<<simu.getVertexCount()<<std::endl;
 		int vertex_id = 0;
-		Eigen::Vector3f pose( 0.0, 0.0, 0.0 );
+		Eigen::Vector3d pose( 0.0, 0.0, 0.0 );
 		
 		simu.readAVertex( vertex_id, pose );
 		
@@ -48,7 +48,7 @@ int main()
 	}
 	
 	// test
-	for( int i = 0; i < vertex_ids.size(); i ++ ) {
+	/*for( int i = 0; i < vertex_ids.size(); i ++ ) {
 		std::cout<<"vertex: "<<vertex_ids[i]<<", pose: "<<std::endl<<vertex_poses[i]<<std::endl;
 	}
 
@@ -57,32 +57,34 @@ int main()
 	}
 	for( int i = 0; i < edge_means.size(); i ++ ){
                 std::cout<<"edge_means : "<<i<<std::endl<<edge_means[i]<<std::endl;
-        }
+        }*/
+	std::cout<<"edge_number : "<<edge_means.size()<<std::endl;
+	std::cout<<"vertex number : "<<vertex_ids.size()<<std::endl;
 
 	Utils::displayVertexPoses( vertex_poses, "init" );
 
 	// ------------------- Graph Optimize -------------------- //
-	graph::GraphOptimize<float> optimizer( vertex_poses.size() );
+	graph::GraphOptimize<double> optimizer( vertex_poses.size() );
 
-	Eigen::Matrix3f info_matrix;
-	info_matrix << 1, 0, 0,
-		       0, 1, 0,
-		       0, 0, 1;
+	Eigen::Matrix3d info_matrix;
+	info_matrix << 20, 0, 0,
+		       0, 20, 0,
+		       0, 0, 100000;
 	auto beforeTime = std::chrono::steady_clock::now();
 	optimizer.execuOptimize( vertex_poses, 
 				 edge_from_ids, 
 				 edge_to_ids, 
 				 edge_means,
-				 info_matrix, 10 );
+				 info_matrix, 1 );
 	auto afterTime = std::chrono::steady_clock::now();
         double duration_millsecond = std::chrono::duration<double, std::milli>(afterTime - beforeTime).count();
         std::cout<<"duration : " << duration_millsecond << "ms" << std::endl;
 
-	std::vector<Eigen::Vector3f> ret_vec = optimizer.getReultVertexPosesVector();
+	std::vector<Eigen::Vector3d> ret_vec = optimizer.getReultVertexPosesVector();
 	
-	for( int i = 0; i < 10; i ++ ){
+	/*for( int i = 0; i < 10; i ++ ){
 		std::cout<<"vertex["<<i<<"] : "<<std::endl<<ret_vec[i]<<std::endl;
-	}
+	}*/
 
 	Utils::displayVertexPoses( ret_vec );
 
